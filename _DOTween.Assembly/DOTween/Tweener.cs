@@ -134,9 +134,12 @@ namespace DG.Tweening
                     try {
                         t.startValue = t.tweenPlugin.ConvertToStartValue(t, t.getter());
                     } catch (Exception e) {
-                        Debugger.LogWarning(string.Format(
-                            "Tween startup failed (NULL target/property - {0}): the tween will now be killed ► {1}", e.TargetSite, e.Message
-                        ));
+                        if (Debugger.logPriority >= 1) {
+                            Debugger.LogWarning(string.Format(
+                                "Tween startup failed (NULL target/property - {0}): the tween will now be killed ► {1}", e.TargetSite, e.Message
+                            ), t);
+                        }
+                        DOTween.safeModeReport.Add(SafeModeReport.SafeModeReportType.StartupFailure);
                         return false; // Target/field doesn't exist: kill tween
                     }
                 } else t.startValue = t.tweenPlugin.ConvertToStartValue(t, t.getter());
@@ -156,7 +159,7 @@ namespace DG.Tweening
         }
 
         // CALLED BY TweenerCore
-        internal static Tweener DoChangeStartValue<T1, T2, TPlugOptions>(
+        internal static TweenerCore<T1, T2, TPlugOptions> DoChangeStartValue<T1, T2, TPlugOptions>(
             TweenerCore<T1, T2, TPlugOptions> t, T2 newStartValue, float newDuration
         ) where TPlugOptions : struct, IPlugOptions
         {
@@ -182,7 +185,7 @@ namespace DG.Tweening
         }
 
         // CALLED BY TweenerCore
-        internal static Tweener DoChangeEndValue<T1, T2, TPlugOptions>(
+        internal static TweenerCore<T1, T2, TPlugOptions> DoChangeEndValue<T1, T2, TPlugOptions>(
             TweenerCore<T1, T2, TPlugOptions> t, T2 newEndValue, float newDuration, bool snapStartValue
         ) where TPlugOptions : struct, IPlugOptions
         {
@@ -201,6 +204,7 @@ namespace DG.Tweening
                         } catch {
                             // Target/field doesn't exist: kill tween
                             TweenManager.Despawn(t);
+                            DOTween.safeModeReport.Add(SafeModeReport.SafeModeReportType.TargetOrFieldMissing);
                             return null;
                         }
                     } else t.startValue = t.tweenPlugin.ConvertToStartValue(t, t.getter());
@@ -219,7 +223,7 @@ namespace DG.Tweening
             return t;
         }
 
-        internal static Tweener DoChangeValues<T1, T2, TPlugOptions>(
+        internal static TweenerCore<T1, T2, TPlugOptions> DoChangeValues<T1, T2, TPlugOptions>(
             TweenerCore<T1, T2, TPlugOptions> t, T2 newStartValue, T2 newEndValue, float newDuration
         ) where TPlugOptions : struct, IPlugOptions
         {

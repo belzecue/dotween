@@ -25,6 +25,7 @@ namespace DG.Tweening.Core
         float _unscaledTime;
         float _unscaledDeltaTime;
 
+        bool _paused; // Used to mark when app is paused and to avoid resume being called when application starts playing
         float _pausedTime; // Marks the time when Unity was paused
 
         bool _duplicateToDestroy;
@@ -35,7 +36,9 @@ namespace DG.Tweening.Core
         {
             if (DOTween.instance == null) DOTween.instance = this;
             else {
-                Debugger.LogWarning("Duplicate DOTweenComponent instance found in scene: destroying it");
+                if (Debugger.logPriority >= 1) {
+                    Debugger.LogWarning("Duplicate DOTweenComponent instance found in scene: destroying it");
+                }
                 Destroy(this.gameObject);
                 return;
             }
@@ -127,25 +130,57 @@ namespace DG.Tweening.Core
                 string s = "Max overall simultaneous active Tweeners/Sequences: " + DOTween.maxActiveTweenersReached + "/" + DOTween.maxActiveSequencesReached;
                 Debugger.LogReport(s);
             }
+
+            if (DOTween.useSafeMode) {
+                int totSafeModeErrors = DOTween.safeModeReport.GetTotErrors();
+                if (totSafeModeErrors > 0) {
+                    string s = string.Format("DOTween's safe mode captured {0} errors." +
+                                             " This is usually ok (it's what safe mode is there for) but if your game is encountering issues" +
+                                             " you should set Log Behaviour to Default in DOTween Utility Panel in order to get detailed" +
+                                             " warnings when an error is captured (consider that these errors are always on the user side).",
+                        totSafeModeErrors
+                    );
+                    if (DOTween.safeModeReport.totMissingTargetOrFieldErrors > 0) {
+                        s += "\n- " + DOTween.safeModeReport.totMissingTargetOrFieldErrors + " missing target or field errors";
+                    }
+                    if (DOTween.safeModeReport.totStartupErrors > 0) {
+                        s += "\n- " + DOTween.safeModeReport.totStartupErrors + " startup errors";
+                    }
+                    if (DOTween.safeModeReport.totCallbackErrors > 0) {
+                        s += "\n- " + DOTween.safeModeReport.totCallbackErrors + " errors inside callbacks (these might be important)";
+                    }
+                    if (DOTween.safeModeReport.totUnsetErrors > 0) {
+                        s += "\n- " + DOTween.safeModeReport.totUnsetErrors + " undetermined errors (these might be important)";
+                    }
+                    Debugger.LogSafeModeReport(s);
+                }
+            }
+
 //            DOTween.initialized = false;
 //            DOTween.instance = null;
+
             if (DOTween.instance == this) DOTween.instance = null;
+            DOTween.Clear(true);
         }
 
         // Detract/reapply pause time from/to unscaled time
         public void OnApplicationPause(bool pauseStatus)
         {
             if (pauseStatus) {
+                _paused = true;
                 _pausedTime = Time.realtimeSinceStartup;
-            } else {
+            } else if (_paused) {
+                _paused = false;
                 _unscaledTime += Time.realtimeSinceStartup - _pausedTime;
             }
         }
 
-        void OnApplicationQuit()
-        {
-            DOTween.isQuitting = true;
-        }
+        // Commented this out because it interferes with Unity 2019.3 "no domain reload" experimental playmode
+        // (now I clear DOTween completely when the DOTween component is destroyed which allows this to be commented out)
+//        void OnApplicationQuit()
+//        {
+//            DOTween.isQuitting = true;
+//        }
 
         #endregion
 

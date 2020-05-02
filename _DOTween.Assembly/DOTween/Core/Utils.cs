@@ -14,7 +14,7 @@ namespace DG.Tweening.Core
     {
         static Assembly[] _loadedAssemblies;
         static readonly string[] _defAssembliesToQuery = new[] { // First assemblies to look into before checking all of them
-            "Assembly-CSharp", "Assembly-CSharp-firstpass"
+            "DOTween.Modules", "Assembly-CSharp", "Assembly-CSharp-firstpass"
         };
 
         /// <summary>
@@ -40,6 +40,11 @@ namespace DG.Tweening.Core
             return ang;
         }
 
+        internal static Vector3 RotateAroundPivot(Vector3 point, Vector3 pivot, Quaternion rotation)
+        {
+            return rotation * (point - pivot) + pivot;
+        }
+
         /// <summary>
         /// Uses approximate equality on each axis instead of Unity's Vector3 equality,
         /// because the latter fails (in some cases) when assigning a Vector3 to a transform.position and then checking it.
@@ -52,7 +57,7 @@ namespace DG.Tweening.Core
         }
 
         /// <summary>
-        /// Looks for the type withing all possible project assembly names
+        /// Looks for the type within all possible project assembly names
         /// </summary>
         internal static Type GetLooseScriptType(string typeName)
         {

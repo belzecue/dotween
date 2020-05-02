@@ -31,7 +31,7 @@ namespace DG.Tweening
         /// <summary>Int ID (usable for filtering with DOTween static methods). 4X faster than using an object id, 2X faster than using a string id.
         /// Default is -999 so avoid using an ID like that or it will capture all unset intIds</summary>
         public int intId = -999;
-        /// <summary>Tween target (usable for filtering with DOTween static methods). Automatically set by tween creation shorcuts</summary>
+        /// <summary>Tween target (usable for filtering with DOTween static methods). Automatically set by tween creation shortcuts</summary>
         public object target; // Automatically set by DO shortcuts using SetTarget extension. Also used during Tweener.DoStartup in some special cases
         // Update type and eventual independence (changed via TweenManager.SetUpdateType)
         internal UpdateType updateType;
@@ -67,7 +67,7 @@ namespace DG.Tweening
         internal float duration;
         internal int loops;
         internal LoopType loopType;
-        // Tweeners-only (shared by Sequences only for compatibility reasons, otherwise not used)
+        // NOW USED BY SEQUENCES TOO (since v1.2.340)
         internal float delay;
         /// <summary>Tweeners-only (ignored by Sequences), returns TRUE if the tween was set as relative</summary>
         public bool isRelative { get; internal set; } // Required by Modules
@@ -77,6 +77,12 @@ namespace DG.Tweening
         public float easeOvershootOrAmplitude; // Public so it can be used with custom plugins
         public float easePeriod; // Public so it can be used with custom plugins
 #pragma warning restore 1591
+
+        // SPECIAL DEBUG DATA ////////////////////////////////////////////////
+        /// <summary>
+        /// Set by SetTarget if DOTween's Debug Mode is on (see DOTween Utility Panel -> "Store GameObject's ID" debug option
+        /// </summary>
+        public string debugTargetId;
 
         // SETUP DATA ////////////////////////////////////////////////
 
@@ -125,6 +131,8 @@ namespace DG.Tweening
             onStart = onPlay = onRewind = onUpdate = onComplete = onStepComplete = onKill = null;
             onWaypointChange = null;
 
+            debugTargetId = null;
+
             target = null;
             isFrom = false;
             isBlendable = false;
@@ -164,7 +172,8 @@ namespace DG.Tweening
 
         // Called by TweenManager in case a tween has a delay that needs to be updated.
         // Returns the eventual time in excess compared to the tween's delay time.
-        // Shared also by Sequences even if they don't use it, in order to make it compatible with Tween.
+        // Previously unused by Sequences but now implemented.
+        // NOT TRUE ANYMORE: Shared also by Sequences even if they don't use it, in order to make it compatible with Tween.
         internal virtual float UpdateDelay(float elapsed) { return 0; }
 
         // Called the moment the tween starts.
@@ -197,11 +206,11 @@ namespace DG.Tweening
             if (!t.playedOnce && updateMode == UpdateMode.Update) {
                 t.playedOnce = true;
                 if (t.onStart != null) {
-                    OnTweenCallback(t.onStart);
+                    OnTweenCallback(t.onStart, t);
                     if (!t.active) return true; // Tween might have been killed by onStart callback
                 }
                 if (t.onPlay != null) {
-                    OnTweenCallback(t.onPlay);
+                    OnTweenCallback(t.onPlay, t);
                     if (!t.active) return true; // Tween might have been killed by onPlay callback
                 }
             }
@@ -240,7 +249,7 @@ namespace DG.Tweening
             }
 
             // updatePosition is different in case of Yoyo loop under certain circumstances
-            bool useInversePosition = t.loopType == LoopType.Yoyo
+            bool useInversePosition = t.loops > 1 && t.loopType == LoopType.Yoyo
                 && (t.position < t.duration ? t.completedLoops % 2 != 0 : t.completedLoops % 2 == 0);
 
             // Get values from plugin and set them
@@ -253,19 +262,22 @@ namespace DG.Tweening
 
             // Additional callbacks
             if (t.onUpdate != null && updateMode != UpdateMode.IgnoreOnUpdate) {
-                OnTweenCallback(t.onUpdate);
+                OnTweenCallback(t.onUpdate, t);
             }
             if (t.position <= 0 && t.completedLoops <= 0 && !wasRewinded && t.onRewind != null) {
-                OnTweenCallback(t.onRewind);
+                OnTweenCallback(t.onRewind, t);
             }
             if (newCompletedSteps > 0 && updateMode == UpdateMode.Update && t.onStepComplete != null) {
-                for (int i = 0; i < newCompletedSteps; ++i) OnTweenCallback(t.onStepComplete);
+                for (int i = 0; i < newCompletedSteps; ++i) {
+                    OnTweenCallback(t.onStepComplete, t);
+                    if (!t.active) break; // A stepComplete killed the tween
+                }
             }
             if (t.isComplete && !wasComplete && updateMode != UpdateMode.IgnoreOnComplete && t.onComplete != null) {
-                OnTweenCallback(t.onComplete);
+                OnTweenCallback(t.onComplete, t);
             }
             if (!t.isPlaying && wasPlaying && (!t.isComplete || !t.autoKill) && t.onPause != null) {
-                OnTweenCallback(t.onPause);
+                OnTweenCallback(t.onPause, t);
             }
 
             // Return
@@ -274,29 +286,35 @@ namespace DG.Tweening
 
         // Assumes that the callback exists (because it was previously checked).
         // Returns TRUE in case of success, FALSE in case of error (if safeMode is on)
-        internal static bool OnTweenCallback(TweenCallback callback)
+        internal static bool OnTweenCallback(TweenCallback callback, Tween t)
         {
             if (DOTween.useSafeMode) {
                 try {
                     callback();
                 } catch (Exception e) {
-                    Debugger.LogWarning(string.Format(
-                        "An error inside a tween callback was silently taken care of ({0}) ► {1}\n\n{2}\n\n", e.TargetSite, e.Message, e.StackTrace
-                    ));
+                    if (Debugger.logPriority >= 1) {
+                        Debugger.LogWarning(string.Format(
+                            "An error inside a tween callback was silently taken care of ({0}) ► {1}\n\n{2}\n\n", e.TargetSite, e.Message, e.StackTrace
+                        ), t);
+                    }
+                    DOTween.safeModeReport.Add(SafeModeReport.SafeModeReportType.Callback);
                     return false; // Callback error
                 }
             } else callback();
             return true;
         }
-        internal static bool OnTweenCallback<T>(TweenCallback<T> callback, T param)
+        internal static bool OnTweenCallback<T>(TweenCallback<T> callback, Tween t, T param)
         {
             if (DOTween.useSafeMode) {
                 try {
                     callback(param);
                 } catch (Exception e) {
-                    Debugger.LogWarning(string.Format(
-                        "An error inside a tween callback was silently taken care of ({0}) ► {1}", e.TargetSite, e.Message
-                    ));
+                    if (Debugger.logPriority >= 1) {
+                        Debugger.LogWarning(string.Format(
+                            "An error inside a tween callback was silently taken care of ({0}) ► {1}", e.TargetSite, e.Message
+                        ), t);
+                    }
+                    DOTween.safeModeReport.Add(SafeModeReport.SafeModeReportType.Callback);
                     return false; // Callback error
                 }
             } else callback(param);

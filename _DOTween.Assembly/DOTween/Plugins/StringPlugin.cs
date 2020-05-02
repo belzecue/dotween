@@ -32,6 +32,15 @@ namespace DG.Tweening.Plugins
             t.startValue = prevEndVal;
             t.setter(t.startValue);
         }
+        public override void SetFrom(TweenerCore<string, string, StringOptions> t, string fromValue, bool setImmediately, bool isRelative)
+        {
+            if (isRelative) {
+                string currVal = t.getter();
+                fromValue += currVal;
+            }
+            t.startValue = fromValue;
+            if (setImmediately) t.setter(fromValue);
+        }
 
         public override void Reset(TweenerCore<string, string, StringOptions> t)
         {

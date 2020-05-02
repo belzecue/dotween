@@ -29,6 +29,7 @@ namespace DG.Tweening.Plugins
         }
 
         public override void SetFrom(TweenerCore<Vector3, Path, PathOptions> t, bool isRelative) {}
+        public override void SetFrom(TweenerCore<Vector3, Path, PathOptions> t, Path fromValue, bool setImmediately, bool isRelative) {}
 
         public static ABSTweenPlugin<Vector3, Path, PathOptions> Get()
         {
@@ -68,15 +69,25 @@ namespace DG.Tweening.Plugins
             int additionalWps = 0;
             bool hasAdditionalStartingP = false, hasAdditionalEndingP = false;
             
-            // Create final wps and add eventual starting/ending waypoints
-//            if (path.wps[0] != currVal) {
+            // Create final wps and add eventual starting/ending waypoints.
             if (!Utils.Vector3AreApproximatelyEqual(path.wps[0], currVal)) {
                 hasAdditionalStartingP = true;
                 additionalWps += 1;
             }
-            if (t.plugOptions.isClosedPath && path.wps[unmodifiedWpsLen - 1] != currVal) {
-                hasAdditionalEndingP = true;
-                additionalWps += 1;
+            if (t.plugOptions.isClosedPath) {
+                Vector3 endWp = path.wps[unmodifiedWpsLen - 1];
+                if (path.type == PathType.CubicBezier) {
+                    if (unmodifiedWpsLen < 3) {
+                        Debug.LogError(
+                            "CubicBezier paths must contain waypoints in multiple of 3 excluding the starting point added automatically by DOTween" +
+                            " (1: waypoint, 2: IN control point, 3: OUT control point — the minimum amount of waypoints for a single curve is 3)"
+                        );
+                    } else endWp = path.wps[unmodifiedWpsLen - 3];
+                }
+                if (endWp != currVal) {
+                    hasAdditionalEndingP = true;
+                    additionalWps += 1;
+                }
             }
             int wpsLen = unmodifiedWpsLen + additionalWps;
             Vector3[] wps = new Vector3[wpsLen];
@@ -87,6 +98,8 @@ namespace DG.Tweening.Plugins
             path.wps = wps;
 
             // Finalize path
+            path.addedExtraStartWp = hasAdditionalStartingP;
+            path.addedExtraEndWp = hasAdditionalEndingP;
             path.FinalizePath(t.plugOptions.isClosedPath, t.plugOptions.lockPositionAxis, currVal);
 
             t.plugOptions.startupRot = trans.rotation;
@@ -125,12 +138,20 @@ namespace DG.Tweening.Plugins
                 t.miscInt = newWaypointIndex;
                 if (t.onWaypointChange != null) {
                     // If more than one waypoint changed, dispatch multiple callbacks
-                    bool isBackwards = newWaypointIndex < prevWPIndex;
-                    if (isBackwards) {
-                        for (int i = prevWPIndex - 1; i > newWaypointIndex - 1; --i) Tween.OnTweenCallback(t.onWaypointChange, i);
-                    } else {
-                        for (int i = prevWPIndex + 1; i < newWaypointIndex + 1; ++i) Tween.OnTweenCallback(t.onWaypointChange, i);
+//                    bool isBackwards = newWaypointIndex < prevWPIndex;
+                    bool isBackwards = t.isBackwards;
+                    if (t.loopType == LoopType.Yoyo) {
+                        isBackwards = !t.isBackwards && t.loops > 1 && t.completedLoops % 2 != 0
+                                      || t.isBackwards && t.loops > 1 && t.completedLoops % 2 == 0;
                     }
+                    if (isBackwards) {
+//                        for (int i = prevWPIndex - 1; i > newWaypointIndex - 1; --i) Tween.OnTweenCallback(t.onWaypointChange, i);
+                        for (int i = prevWPIndex - 1; i > newWaypointIndex - 1; --i) Tween.OnTweenCallback(t.onWaypointChange, t, i);
+                    } else {
+//                        for (int i = prevWPIndex + 1; i < newWaypointIndex + 1; ++i) Tween.OnTweenCallback(t.onWaypointChange, i);
+                        for (int i = prevWPIndex + 1; i < newWaypointIndex; ++i) Tween.OnTweenCallback(t.onWaypointChange, t, i);
+                    }
+                    Tween.OnTweenCallback(t.onWaypointChange, t, newWaypointIndex);
                 }
             }
         }

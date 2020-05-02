@@ -34,8 +34,8 @@ namespace DG.Tweening
     {
         #region Tweeners + Sequences
 
-        /// <summary>Sets the autoKill behaviour of the tween. 
-        /// Has no effect if the tween has already started</summary>
+        /// <summary>Sets the autoKill behaviour of the tween to TRUE. 
+        /// <code>Has no effect</code> if the tween has already started or if it's added to a Sequence</summary>
         public static T SetAutoKill<T>(this T t) where T : Tween
         {
             if (t == null || !t.active || t.creationLocked) return t;
@@ -44,7 +44,7 @@ namespace DG.Tweening
             return t;
         }
         /// <summary>Sets the autoKill behaviour of the tween. 
-        /// Has no effect if the tween has already started</summary>
+        /// <code>Has no effect</code> if the tween has already started or if it's added to a Sequence</summary>
         /// <param name="autoKillOnCompletion">If TRUE the tween will be automatically killed when complete</param>
         public static T SetAutoKill<T>(this T t, bool autoKillOnCompletion) where T : Tween
         {
@@ -84,6 +84,30 @@ namespace DG.Tweening
             return t;
         }
 
+        /// <summary>Allows to link this tween to a GameObject
+        /// so that it will be automatically killed when the GameObject is destroyed.
+        /// <code>Has no effect</code> if the tween is added to a Sequence</summary>
+        /// <param name="gameObject">The link target (unrelated to the target set via <code>SetTarget</code>)</param>
+        public static T SetLink<T>(this T t, GameObject gameObject) where T : Tween
+        {
+            if (t == null || !t.active || t.isSequenced || gameObject == null) return t;
+
+            TweenManager.AddTweenLink(t, new TweenLink(gameObject, LinkBehaviour.KillOnDestroy));
+            return t;
+        }
+        /// <summary>Allows to link this tween to a GameObject and assign a behaviour depending on it.
+        /// This will also automatically kill the tween when the GameObject is destroyed.
+        /// <code>Has no effect</code> if the tween is added to a Sequence</summary>
+        /// <param name="gameObject">The link target (unrelated to the target set via <code>SetTarget</code>)</param>
+        /// <param name="behaviour">The behaviour to use (<see cref="LinkBehaviour.KillOnDestroy"/> is always evaluated even if you choose another one)</param>
+        public static T SetLink<T>(this T t, GameObject gameObject, LinkBehaviour behaviour) where T : Tween
+        {
+            if (t == null || !t.active || t.isSequenced || gameObject == null) return t;
+
+            TweenManager.AddTweenLink(t, new TweenLink(gameObject, behaviour));
+            return t;
+        }
+
         /// <summary>Sets the target for the tween, which can then be used as a filter with DOTween's static methods.
         /// <para>IMPORTANT: use it with caution. If you just want to set an ID for the tween use <code>SetId</code> instead.</para>
         /// When using shorcuts the shortcut target is already assigned as the tween's target,
@@ -93,6 +117,10 @@ namespace DG.Tweening
         {
             if (t == null || !t.active) return t;
 
+            if (DOTween.debugStoreTargetId) {
+                Component comp = target as Component;
+                t.debugTargetId = comp != null ? comp.name : target.ToString();
+            }
             t.target = target;
             return t;
         }
@@ -546,6 +574,8 @@ namespace DG.Tweening
 
         #region Tweeners-only
 
+        #region FROM
+
         /// <summary>Changes a TO tween into a FROM tween: sets the current target's position as the tween's endValue
         /// then immediately sends the target to the previously set endValue.</summary>
         public static T From<T>(this T t) where T : Tweener
@@ -569,8 +599,59 @@ namespace DG.Tweening
             return t;
         }
 
-        /// <summary>Sets a delayed startup for the tween.
-        /// <para>Has no effect on Sequences or if the tween has already started</para></summary>
+        /// <summary>Changes a TO tween into a FROM tween: sets the tween's starting value to the given one
+        /// and eventually sets the tween's target to that value immediately.</summary>
+        /// <param name="fromValue">Value to start from</param>
+        /// <param name="setImmediately">If TRUE sets the target to from value immediately, otherwise waits for the tween to start</param>
+        public static TweenerCore<T1,T2,TPlugOptions> From<T1,T2,TPlugOptions>(
+            this TweenerCore<T1,T2,TPlugOptions> t, T2 fromValue, bool setImmediately = true, bool isRelative = false
+        ) where TPlugOptions : struct, IPlugOptions
+        {
+            if (t == null || !t.active || t.creationLocked || !t.isFromAllowed) return t;
+
+            t.isFrom = true;
+            t.SetFrom(fromValue, setImmediately, isRelative);
+            return t;
+        }
+
+        #region FROM Extra Overloads
+
+        /// <summary>Changes a TO tween into a FROM tween: sets the tween's starting value to the given one
+        /// and eventually sets the tween's target to that value immediately.</summary>
+        /// <param name="fromAlphaValue">Alpha value to start from (in case of Fade tweens)</param>
+        /// <param name="setImmediately">If TRUE sets the target to from value immediately, otherwise waits for the tween to start</param>
+        public static TweenerCore<DOColor, DOColor, ColorOptions> From(
+            this TweenerCore<DOColor, DOColor, ColorOptions> t, float fromAlphaValue, bool setImmediately = true, bool isRelative = false
+        ){
+            if (t == null || !t.active || t.creationLocked || !t.isFromAllowed) return t;
+
+            t.isFrom = true;
+            t.SetFrom(new Color(0,0,0,fromAlphaValue), setImmediately, isRelative);
+            return t;
+        }
+
+        /// <summary>Changes a TO tween into a FROM tween: sets the tween's starting value to the given one
+        /// and eventually sets the tween's target to that value immediately.</summary>
+        /// <param name="fromValue">Value to start from (in case of Vector tweens that act on a single coordinate or scale tweens)</param>
+        /// <param name="setImmediately">If TRUE sets the target to from value immediately, otherwise waits for the tween to start</param>
+        public static TweenerCore<DOVector3, DOVector3, VectorOptions> From(
+            this TweenerCore<DOVector3, DOVector3, VectorOptions> t, float fromValue, bool setImmediately = true, bool isRelative = false
+        ){
+            if (t == null || !t.active || t.creationLocked || !t.isFromAllowed) return t;
+
+            t.isFrom = true;
+            t.SetFrom(new Vector3(fromValue, fromValue, fromValue), setImmediately, isRelative);
+            return t;
+        }
+
+        #endregion
+
+        #endregion
+
+        /// <summary>Sets a delayed startup for the tween.<para/>
+        /// In case of Sequences behaves the same as <see cref="PrependInterval"/>,
+        /// which means the delay will repeat in case of loops (while with tweens it's ignored after the first loop cycle).<para/>
+        /// Has no effect if the tween has already started</summary>
         public static T SetDelay<T>(this T t, float delay) where T : Tween
         {
             if (t == null || !t.active || t.creationLocked) return t;
@@ -580,6 +661,25 @@ namespace DG.Tweening
             } else {
                 t.delay = delay;
                 t.delayComplete = delay <= 0;
+            }
+            return t;
+        }
+        /// <summary>EXPERIMENTAL: implemented in v1.2.340.<para/>
+        /// Sets a delayed startup for the tween with options to choose how the delay is applied in case of Sequences.<para/>
+        /// Has no effect if the tween has already started</summary>
+        /// <param name="asPrependedIntervalIfSequence">Only used by <see cref="Sequence"/> types: If FALSE sets the delay as a one-time occurrence
+        /// (defaults to this for <see cref="Tweener"/> types),
+        /// otherwise as a Sequence interval which will repeat at the beginning of every loop cycle</param>
+        public static T SetDelay<T>(this T t, float delay, bool asPrependedIntervalIfSequence) where T : Tween
+        {
+            if (t == null || !t.active || t.creationLocked) return t;
+
+            bool isSequence = t.tweenType == TweenType.Sequence;
+            if (!isSequence || !asPrependedIntervalIfSequence) {
+                t.delay = delay;
+                t.delayComplete = delay <= 0;
+            } else {
+                (t as Sequence).PrependInterval(delay);
             }
             return t;
         }

@@ -21,6 +21,7 @@ namespace DG.DOTweenEditor.UI
         public static GUIStyle handlelabelStyle,
                                handleSelectedLabelStyle,
                                wordWrapLabelStyle,
+                               wordWrapRichTextLabelStyle,
                                wordWrapItalicLabelStyle,
                                titleStyle,
                                logoIconStyle;
@@ -45,7 +46,7 @@ namespace DG.DOTweenEditor.UI
         static Texture2D _logo;
 
         // Filtered ease types to show desired eases in Inspector panels
-        internal static readonly string[] FilteredEaseTypes = new[] {
+        public static readonly string[] FilteredEaseTypes = new[] {
             "Linear",
             "InSine",
             "OutSine",
@@ -77,6 +78,9 @@ namespace DG.DOTweenEditor.UI
             "InBounce",
             "OutBounce",
             "InOutBounce",
+            // Extra custom
+            "Flash", "InFlash", "OutFlash", "InOutFlash",
+            // Curve
             ":: AnimationCurve" // Must be set manually to INTERNAL_Custom
         };
 
@@ -84,14 +88,35 @@ namespace DG.DOTweenEditor.UI
         // PUBLIC METHODS --------------------------------------------------------------------
 
         // Ease popup with filtered eases
-        public static Ease FilteredEasePopup(Ease currEase)
+        public static Ease FilteredEasePopup(string label, Ease currEase, GUIStyle style = null)
+        {
+            if (style == null) style = EditorStyles.popup;
+            Rect area = EditorGUILayout.GetControlRect(label != null, 18, style);
+            return FilteredEasePopup(area, label, currEase, style);
+//            int stringEaseId = currEase == Ease.INTERNAL_Custom
+//                ? FilteredEaseTypes.Length - 1
+//                : Array.IndexOf(FilteredEaseTypes, currEase.ToString());
+//            if (stringEaseId == -1) stringEaseId = 0;
+//            stringEaseId = label == null
+//                ? EditorGUILayout.Popup(stringEaseId, FilteredEaseTypes, style == null ? EditorStyles.popup : style)
+//                : EditorGUILayout.Popup(label, stringEaseId, FilteredEaseTypes, style == null ? EditorStyles.popup : style);
+//            return stringEaseId == FilteredEaseTypes.Length - 1
+//                ? Ease.INTERNAL_Custom
+//                : (Ease)Enum.Parse(typeof(Ease), FilteredEaseTypes[stringEaseId]);
+        }
+        // Ease popup with filtered eases
+        public static Ease FilteredEasePopup(Rect rect, string label, Ease currEase, GUIStyle style = null)
         {
             int stringEaseId = currEase == Ease.INTERNAL_Custom
                 ? FilteredEaseTypes.Length - 1
                 : Array.IndexOf(FilteredEaseTypes, currEase.ToString());
             if (stringEaseId == -1) stringEaseId = 0;
-            stringEaseId = EditorGUILayout.Popup("Ease", stringEaseId, FilteredEaseTypes);
-            return stringEaseId == FilteredEaseTypes.Length - 1 ? Ease.INTERNAL_Custom : (Ease)Enum.Parse(typeof(Ease), FilteredEaseTypes[stringEaseId]);
+            stringEaseId = label == null
+                ? EditorGUI.Popup(rect, stringEaseId, FilteredEaseTypes, style == null ? EditorStyles.popup : style)
+                : EditorGUI.Popup(rect, label, stringEaseId, FilteredEaseTypes, style == null ? EditorStyles.popup : style);
+            return stringEaseId == FilteredEaseTypes.Length - 1
+                ? Ease.INTERNAL_Custom
+                : (Ease)Enum.Parse(typeof(Ease), FilteredEaseTypes[stringEaseId]);
         }
 
         public static void InspectorLogo()
@@ -100,10 +125,10 @@ namespace DG.DOTweenEditor.UI
         }
 
         // A button which works as a toggle
-        public static bool ToggleButton(bool toggled, GUIContent content, GUIStyle guiStyle = null, params GUILayoutOption[] options)
+        public static bool ToggleButton(bool toggled, GUIContent content, bool alert = false, GUIStyle guiStyle = null, params GUILayoutOption[] options)
         {
             Color orColor = UnityEngine.GUI.backgroundColor;
-            UnityEngine.GUI.backgroundColor = toggled ? Color.green : Color.white;
+            UnityEngine.GUI.backgroundColor = toggled ? alert ? Color.red : Color.green : Color.white;
             bool clicked = guiStyle == null
                 ? GUILayout.Button(content, options)
                 : GUILayout.Button(content, guiStyle, options);
@@ -125,7 +150,7 @@ namespace DG.DOTweenEditor.UI
                 btImgStyle.normal.background = null;
                 btImgStyle.imagePosition = ImagePosition.ImageOnly;
                 btImgStyle.padding = new RectOffset(0, 0, 0, 0);
-                btImgStyle.fixedWidth = footerSizeV.x;
+//                btImgStyle.fixedWidth = footerSizeV.x;
                 btImgStyle.fixedHeight = footerSizeV.y;
             }
 
@@ -147,7 +172,7 @@ namespace DG.DOTweenEditor.UI
                 btBigStyle.padding = new RectOffset(0, 0, 10, 10);
 
                 btSetup = new GUIStyle(btBigStyle);
-                btSetup.padding = new RectOffset(36, 36, 6, 6);
+                btSetup.padding = new RectOffset(10, 10, 6, 6);
                 btSetup.wordWrap = true;
                 btSetup.richText = true;
 
@@ -169,6 +194,10 @@ namespace DG.DOTweenEditor.UI
 
                 wordWrapLabelStyle = new GUIStyle(UnityEngine.GUI.skin.label);
                 wordWrapLabelStyle.wordWrap = true;
+
+                wordWrapRichTextLabelStyle = new GUIStyle(UnityEngine.GUI.skin.label);
+                wordWrapRichTextLabelStyle.wordWrap = true;
+                wordWrapRichTextLabelStyle.richText = true;
 
                 wordWrapItalicLabelStyle = new GUIStyle(wordWrapLabelStyle);
                 wordWrapItalicLabelStyle.fontStyle = FontStyle.Italic;

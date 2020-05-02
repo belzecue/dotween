@@ -11,8 +11,10 @@ namespace DG.Tweening.Core
     public class DOTweenSettings : ScriptableObject
     {
         public const string AssetName = "DOTweenSettings";
+        public const string AssetFullFilename = AssetName + ".asset";
 
         public bool useSafeMode = true;
+        public SafeModeOptions safeModeOptions = new SafeModeOptions();
         public float timeScale = 1;
         public bool useSmoothDeltaTime;
         public float maxSmoothUnscaledTime = 0.15f; // Used if useSmoothDeltaTime is TRUE
@@ -29,6 +31,14 @@ namespace DG.Tweening.Core
         public float defaultEasePeriod = 0;
         public bool defaultAutoKill = true;
         public LoopType defaultLoopType = LoopType.Restart;
+
+        // Debug
+        public bool debugMode = false;
+        // Stores the target id so it can be used to give more info in case of safeMode error capturing
+        public bool debugStoreTargetId = false;
+
+        // Pro-only - accessed via DOTweenAnimationInspector
+        public bool showPreviewPanel = true;
 
         // Editor-only
         public enum SettingsLocation
@@ -48,6 +58,12 @@ namespace DG.Tweening.Core
         // █████████████████████████████████████████████████████████████████████████████████████████████████████████████████████
 
         [Serializable]
+        public class SafeModeOptions
+        {
+            public NestedTweenFailureBehaviour nestedTweenFailureBehaviour = NestedTweenFailureBehaviour.TryToPreserveSequence;
+        }
+
+        [Serializable]
         public class ModulesSetup // Editor-only
         {
             public bool showPanel;
@@ -59,6 +75,8 @@ namespace DG.Tweening.Core
             public bool uiEnabled = true;
             public bool textMeshProEnabled;
             public bool tk2DEnabled;
+            public bool deAudioEnabled;
+            public bool deUnityExtendedEnabled;
         }
     }
 }

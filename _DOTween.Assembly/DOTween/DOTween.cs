@@ -4,6 +4,8 @@
 // License Copyright (c) Daniele Giardini.
 // This work is subject to the terms at http://dotween.demigiant.com/license.php
 
+
+using System;
 #if COMPATIBLE
 using DOVector2 = DG.Tweening.Core.Surrogates.Vector2Wrapper;
 using DOVector3 = DG.Tweening.Core.Surrogates.Vector3Wrapper;
@@ -32,7 +34,7 @@ namespace DG.Tweening
     public class DOTween
     {
         /// <summary>DOTween's version</summary>
-        public static readonly string Version = "1.2.120"; // Last version before modules: 1.1.755
+        public static readonly string Version = "1.2.385"; // Last version before modules: 1.1.755
 
         ///////////////////////////////////////////////
         // Options ////////////////////////////////////
@@ -41,6 +43,9 @@ namespace DG.Tweening
         /// (like targets becoming null while a tween is playing).
         /// <para>Default: TRUE</para></summary>
         public static bool useSafeMode = true;
+        /// <summary>Behaviour in case a tween nested inside a Sequence fails (caught by safe mode).
+        /// <para>Default: NestedTweenFailureBehaviour.TryToPreserveSequence</para></summary>
+        public static NestedTweenFailureBehaviour nestedTweenFailureBehaviour = NestedTweenFailureBehaviour.TryToPreserveSequence;
         /// <summary>If TRUE you will get a DOTween report when exiting play mode (only in the Editor).
         /// Useful to know how many max Tweeners and Sequences you reached and optimize your final project accordingly.
         /// Beware, this will slightly slow down your tweens while inside Unity Editor.
@@ -68,9 +73,25 @@ namespace DG.Tweening
             set { _logBehaviour = value; Debugger.SetLogPriority(_logBehaviour); }
         }
         static LogBehaviour _logBehaviour = LogBehaviour.ErrorsOnly;
+        /// <summary>Used to intercept DOTween's logs. If this method isn't NULL, DOTween will call it before writing a log via Unity's own Debug log methods.<para/>
+        /// Return TRUE if you want DOTween to proceed with the log, FALSE otherwise.<para/>
+        /// This method must return a <code>bool</code> and accept two parameters:<para/>
+        /// - <code>LogType</code>: the type of Unity log that DOTween is trying to log<para/>
+        /// - <code>object</code>: the log message that DOTween wants to log</summary>
+        public static Func<LogType, object, bool> onWillLog;
         /// <summary>If TRUE draws path gizmos in Unity Editor (if the gizmos button is active).
         /// Deactivate this if you want to avoid gizmos overhead while in Unity Editor</summary>
         public static bool drawGizmos = true;
+        // DEBUG OPTIONS
+        /// <summary>If TRUE activates various debug options</summary>
+        public static bool debugMode = false;
+        /// <summary>Stores the target id so it can be used to give more info in case of safeMode error capturing.
+        /// Only active if both <code>debugMode</code> and <code>useSafeMode</code> are TRUE</summary>
+        public static bool debugStoreTargetId {
+            get { return debugMode && useSafeMode && _fooDebugStoreTargetId; }
+            set { _fooDebugStoreTargetId = value; }
+        }
+        static bool _fooDebugStoreTargetId = false;
 
         ///////////////////////////////////////////////
         // Default options for Tweens /////////////////
@@ -107,6 +128,7 @@ namespace DG.Tweening
         public static DOTweenComponent instance;
 
         internal static int maxActiveTweenersReached, maxActiveSequencesReached; // Controlled by DOTweenInspector if showUnityEditorReport is active
+        internal static SafeModeReport safeModeReport; // Used to store how many safe mode errors are captured in the editor
         internal static readonly List<TweenCallback> GizmosDelegates = new List<TweenCallback>(); // Can be used by other classes to call internal gizmo draw methods
         internal static bool initialized; // Can be set to false by DOTweenComponent OnDestroy
         internal static bool isQuitting; // Set by DOTweenComponent when the application is quitting
@@ -149,6 +171,7 @@ namespace DG.Tweening
         // Auto-init
         static void AutoInit()
         {
+            if (!Application.isPlaying || isQuitting) return;
             DOTweenSettings settings = Resources.Load(DOTweenSettings.AssetName) as DOTweenSettings;
             Init(settings, null, null, null);
         }
@@ -167,6 +190,7 @@ namespace DG.Tweening
                 if (useSafeMode == null) DOTween.useSafeMode = settings.useSafeMode;
                 if (logBehaviour == null) DOTween.logBehaviour = settings.logBehaviour;
                 if (recycleAllByDefault == null) DOTween.defaultRecyclable = settings.defaultRecyclable;
+                DOTween.nestedTweenFailureBehaviour = settings.safeModeOptions.nestedTweenFailureBehaviour;
                 DOTween.timeScale = settings.timeScale;
                 DOTween.useSmoothDeltaTime = settings.useSmoothDeltaTime;
                 DOTween.maxSmoothUnscaledTime = settings.maxSmoothUnscaledTime;
@@ -182,6 +206,9 @@ namespace DG.Tweening
                 DOTween.defaultEasePeriod = settings.defaultEasePeriod;
                 DOTween.defaultAutoKill = settings.defaultAutoKill;
                 DOTween.defaultLoopType = settings.defaultLoopType;
+                // Debug options
+                DOTween.debugMode = settings.debugMode;
+                DOTween.debugStoreTargetId = settings.debugStoreTargetId;
             }
             // Log
             if (Debugger.logPriority >= 2) Debugger.Log("DOTween initialization (useSafeMode: " + DOTween.useSafeMode + ", recycling: " + (DOTween.defaultRecyclable ? "ON" : "OFF") + ", logBehaviour: " + DOTween.logBehaviour + ")");
@@ -220,6 +247,7 @@ namespace DG.Tweening
 
             initialized = false;
             useSafeMode = false;
+            nestedTweenFailureBehaviour = NestedTweenFailureBehaviour.TryToPreserveSequence;
             showUnityEditorReport = false;
             drawGizmos = true;
             timeScale = 1;
@@ -307,7 +335,7 @@ namespace DG.Tweening
         /// <param name="setter">A setter for the field or property to tween
         /// <para>Example usage with lambda:</para><code>x=> myProperty = x</code></param>
         /// <param name="endValue">The end value to reach</param><param name="duration">The tween's duration</param>
-        public static Tweener To(DOGetter<int> getter, DOSetter<int> setter, int endValue,float duration)
+        public static TweenerCore<int, int, NoOptions> To(DOGetter<int> getter, DOSetter<int> setter, int endValue,float duration)
         { return ApplyTo<int, int, NoOptions>(getter, setter, endValue, duration); }
         /// <summary>Tweens a property or field to the given value using default plugins</summary>
         /// <param name="getter">A getter for the field or property to tween.
@@ -315,7 +343,7 @@ namespace DG.Tweening
         /// <param name="setter">A setter for the field or property to tween
         /// <para>Example usage with lambda:</para><code>x=> myProperty = x</code></param>
         /// <param name="endValue">The end value to reach</param><param name="duration">The tween's duration</param>
-        public static Tweener To(DOGetter<uint> getter, DOSetter<uint> setter, uint endValue, float duration)
+        public static TweenerCore<uint, uint, UintOptions> To(DOGetter<uint> getter, DOSetter<uint> setter, uint endValue, float duration)
         { return ApplyTo<uint, uint, UintOptions>(getter, setter, endValue, duration); }
         /// <summary>Tweens a property or field to the given value using default plugins</summary>
         /// <param name="getter">A getter for the field or property to tween.
@@ -323,7 +351,7 @@ namespace DG.Tweening
         /// <param name="setter">A setter for the field or property to tween
         /// <para>Example usage with lambda:</para><code>x=> myProperty = x</code></param>
         /// <param name="endValue">The end value to reach</param><param name="duration">The tween's duration</param>
-        public static Tweener To(DOGetter<long> getter, DOSetter<long> setter, long endValue, float duration)
+        public static TweenerCore<long, long, NoOptions> To(DOGetter<long> getter, DOSetter<long> setter, long endValue, float duration)
         { return ApplyTo<long, long, NoOptions>(getter, setter, endValue, duration); }
         /// <summary>Tweens a property or field to the given value using default plugins</summary>
         /// <param name="getter">A getter for the field or property to tween.
@@ -331,7 +359,7 @@ namespace DG.Tweening
         /// <param name="setter">A setter for the field or property to tween
         /// <para>Example usage with lambda:</para><code>x=> myProperty = x</code></param>
         /// <param name="endValue">The end value to reach</param><param name="duration">The tween's duration</param>
-        public static Tweener To(DOGetter<ulong> getter, DOSetter<ulong> setter, ulong endValue, float duration)
+        public static TweenerCore<ulong, ulong, NoOptions> To(DOGetter<ulong> getter, DOSetter<ulong> setter, ulong endValue, float duration)
         { return ApplyTo<ulong, ulong, NoOptions>(getter, setter, endValue, duration); }
         /// <summary>Tweens a property or field to the given value using default plugins</summary>
         /// <param name="getter">A getter for the field or property to tween.
@@ -426,14 +454,19 @@ namespace DG.Tweening
             t.plugOptions.axisConstraint = axisConstraint;
             return t;
         }
+
         /// <summary>Tweens only the alpha of a Color to the given value using default plugins</summary>
         /// <param name="getter">A getter for the field or property to tween.
         /// <para>Example usage with lambda:</para><code>()=> myProperty</code></param>
         /// <param name="setter">A setter for the field or property to tween
         /// <para>Example usage with lambda:</para><code>x=> myProperty = x</code></param>
         /// <param name="endValue">The end value to reach</param><param name="duration">The tween's duration</param>
-        public static Tweener ToAlpha(DOGetter<DOColor> getter, DOSetter<DOColor> setter, float endValue, float duration)
-        { return ApplyTo<DOColor, DOColor, ColorOptions>(getter, setter, new Color(0, 0, 0, endValue), duration).SetOptions(true); }
+        public static TweenerCore<Color, Color, ColorOptions> ToAlpha(DOGetter<DOColor> getter, DOSetter<DOColor> setter, float endValue, float duration)
+        {
+            TweenerCore<Color, Color, ColorOptions> t = ApplyTo<DOColor, DOColor, ColorOptions>(getter, setter, new Color(0, 0, 0, endValue), duration);
+            t.SetOptions(true);
+            return t;
+        }
 
         #endregion
 
@@ -984,7 +1017,8 @@ namespace DG.Tweening
         {
             InitCheck();
             TweenerCore<T1, T2, TPlugOptions> tweener = TweenManager.GetTweener<T1, T2, TPlugOptions>();
-            if (!Tweener.Setup(tweener, getter, setter, endValue, duration, plugin)) {
+            bool setupSuccessful = Tweener.Setup(tweener, getter, setter, endValue, duration, plugin);
+            if (!setupSuccessful) {
                 TweenManager.Despawn(tweener);
                 return null;
             }

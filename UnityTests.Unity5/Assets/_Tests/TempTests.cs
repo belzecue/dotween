@@ -1,32 +1,37 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using DG.Tweening;
 using DG.Tweening.Core;
 using DG.Tweening.Plugins.Options;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Debug = UnityEngine.Debug;
 
 public class TempTests : BrainBase
 {
-    public Transform target0;
-    public Transform target1;
+    public Transform target;
 
-    void OnEnable()
+    void Start()
     {
-        this.StartCoroutine(CreateTweens());
+        var prefab = Instantiate(target, transform);
+        prefab.transform.DOScale(2.0f, 1.0f).SetDelay(2.0f);
+        StartCoroutine(Wait(1.0f, () => Destroy(prefab.gameObject)));
     }
 
-    IEnumerator CreateTweens()
+    IEnumerator Wait(float time, UnityAction callback)
     {
-        Tween t0 = target0.DOBlendableLocalMoveBy(new Vector3(1, 2, 1), 2f);
-        Tween t1 = target1.DOBlendableLocalMoveBy(new Vector3(1, -2, 1), 2f);
+        yield return new WaitForSeconds(time);
+        callback();
+    }
 
-        yield return new WaitForSeconds(1);
-
-        t0.Kill();
-        t1.Goto(1.5f);
+    void OnDestroy()
+    {
+        Debug.Log("OnDestroy");
+        target.DOMoveX(2, 1);
     }
 }

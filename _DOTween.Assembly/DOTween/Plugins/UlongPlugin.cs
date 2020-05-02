@@ -23,6 +23,16 @@ namespace DG.Tweening.Plugins
             t.startValue = isRelative ? t.endValue + prevEndVal : prevEndVal;
             t.setter(t.startValue);
         }
+        public override void SetFrom(TweenerCore<ulong, ulong, NoOptions> t, ulong fromValue, bool setImmediately, bool isRelative)
+        {
+            if (isRelative) {
+                ulong currVal = t.getter();
+                t.endValue += currVal;
+                fromValue += currVal;
+            }
+            t.startValue = fromValue;
+            if (setImmediately) t.setter(fromValue);
+        }
 
         public override ulong ConvertToStartValue(TweenerCore<ulong, ulong, NoOptions> t, ulong value)
         {
